@@ -39,8 +39,36 @@ android {
     }
 }
 
-dependencies {
+fun findExecutable(executable: String): String = System.getenv("PATH")
+    .split(File.pathSeparatorChar)
+    .map { File(it, executable) }
+    .find { it.exists() && it.canExecute() }
+    ?.absolutePath
+    ?: throw GradleException("$executable not found in PATH")
 
+
+val goSrcDir = "src/go"
+val goBuildDir = "build/go"
+val compileGoTaskName = "compileGo"
+
+tasks.register(compileGoTaskName) {
+    doFirst { File("$projectDir/$goBuildDir").mkdirs() }
+    doLast {
+        exec {
+            setWorkingDir(goSrcDir)
+            commandLine(
+                // if gradle can't find gomobile, run `go get golang.org/x/mobile/cmd/gomobile`
+                // it should be in $HOME/go/bin, but `findExecutable` finds it anywhere in $PATH
+                findExecutable("gomobile"),
+                "bind",
+                "-target=android",
+                "-o=$projectDir/$goBuildDir/logging.aar",
+            )
+        }
+    }
+}
+
+dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -58,8 +86,9 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     implementation(
-        fileTree(project.rootDir) {
+        fileTree(goBuildDir) {
             include("*.aar")
+            builtBy(compileGoTaskName)
         },
     )
 }
